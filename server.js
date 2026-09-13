@@ -10,11 +10,16 @@ app.use(express.json());
 
 const BOT_1_TOKEN = process.env.BOT_1_TOKEN || "";
 const BOT_2_TOKEN = process.env.BOT_2_TOKEN || "";
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "";
 
-async function sendTelegram(token, message) {
+const CHAT_ID_1 = "-1004414013670";
+const CHAT_ID_2 = "-1004440433866";
+
+async function sendTelegram(token, chatId, message) {
   if (!token) {
-    return { success: false, error: "Bot token missing" };
+    return {
+      success: false,
+      error: "Bot token missing"
+    };
   }
 
   try {
@@ -26,9 +31,10 @@ async function sendTelegram(token, message) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          chat_id: CHAT_ID,
+          chat_id: chatId,
           text: message,
-          parse_mode: "HTML"
+          parse_mode: "HTML",
+          disable_web_page_preview: true
         })
       }
     );
@@ -42,7 +48,10 @@ async function sendTelegram(token, message) {
       };
     }
 
-    return { success: true };
+    return {
+      success: true
+    };
+
   } catch (error) {
     return {
       success: false,
@@ -51,27 +60,37 @@ async function sendTelegram(token, message) {
   }
 }
 
+
+// Home
 app.get("/", (req, res) => {
   res.json({
     app: "ALSA PANEL Backend",
+    version: "1.0.0",
     status: "online"
   });
 });
 
+
+// Health Check
 app.get("/health", (req, res) => {
   res.json({
     success: true,
-    status: "healthy"
+    status: "healthy",
+    uptime: process.uptime()
   });
 });
 
+
+// Firebase Connected
 app.post("/api/firebase-connected", async (req, res) => {
   try {
+
     const {
       event,
       firebaseUrl,
       time
-    } = req.body;
+    } = req.body || {};
+
 
     if (event !== "firebase_connected") {
       return res.status(400).json({
@@ -80,6 +99,7 @@ app.post("/api/firebase-connected", async (req, res) => {
       });
     }
 
+
     if (!firebaseUrl) {
       return res.status(400).json({
         success: false,
@@ -87,12 +107,6 @@ app.post("/api/firebase-connected", async (req, res) => {
       });
     }
 
-    if (!CHAT_ID) {
-      return res.status(500).json({
-        success: false,
-        error: "TELEGRAM_CHAT_ID not configured"
-      });
-    }
 
     const message = `
 <b>🔥 ALSA PANEL</b>
@@ -100,40 +114,68 @@ app.post("/api/firebase-connected", async (req, res) => {
 <b>Firebase Connected</b>
 
 <b>Firebase URL:</b>
-<code>${firebaseUrl}</code>
+<code>${String(firebaseUrl)
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")}</code>
 
 <b>Time:</b>
 <code>${time || new Date().toISOString()}</code>
 `;
 
+
+    // দুইটা bot-এ একসাথে পাঠাবে
     const results = await Promise.all([
-      sendTelegram(BOT_1_TOKEN, message),
-      sendTelegram(BOT_2_TOKEN, message)
+      sendTelegram(
+        BOT_1_TOKEN,
+        CHAT_ID_1,
+        message
+      ),
+
+      sendTelegram(
+        BOT_2_TOKEN,
+        CHAT_ID_2,
+        message
+      )
     ]);
+
 
     const sent = results.filter(
       result => result.success
     ).length;
 
+
     res.json({
       success: sent > 0,
+
       botsSent: sent,
+
       bot1: results[0].success,
+
       bot2: results[1].success
     });
 
+
   } catch (error) {
-    console.error(error);
+
+    console.error(
+      "ALSA Backend Error:",
+      error
+    );
 
     res.status(500).json({
       success: false,
       error: "Internal server error"
     });
+
   }
 });
 
+
 app.listen(PORT, () => {
+
   console.log(
     `ALSA PANEL Backend running on port ${PORT}`
   );
+
 });
